@@ -45,7 +45,7 @@ namespace ptmc_discrete{
         MatrixXd posteriorOut;
         MatrixXi posteriorDiscrete;
         MatrixXd currentCovarianceMatrix;
-        VectorXd currentLogPosterior, proposalSample;
+        VectorXd currentLogPosterior, currentLogLikelihood, currentLogPrior, proposalSample;
         VectorXd temperatureLadder, temperatureLadderParameterised;
         
         MatrixXi currentDiscrete;
@@ -64,7 +64,7 @@ namespace ptmc_discrete{
         VectorXi counterFuncEval, counterAccepted, counterPosterior ,counterAdaptive;
         VectorXi counterNonAdaptive, counterFuncEvalTemp, counterAcceptTemp;
         
-        double proposedLogPosterior, alpha, covarMaxVal, covarInitVal, covarInitValAdapt;
+        double proposedLogPosterior, proposedLogLikelihood, proposedLogPrior, alpha, covarMaxVal, covarInitVal, covarInitValAdapt;
 
         std::function<VectorXd(RObject)> samplePriorDistributions;
         std::function<VectorXi(RObject)> initialiseDiscrete;
@@ -78,12 +78,12 @@ namespace ptmc_discrete{
         double stepSizeRobbinsMonro;
         double evalLogPosterior(const VectorXd& param, const VectorXi& discrete, const MatrixXd& covariance, const RObject& dataList)
         {
-            double logPrior = this->evaluateLogPrior(param, discrete, dataList);
-            if (isinf(logPrior))
+            this->proposedLogPrior = this->evaluateLogPrior(param, discrete, dataList);
+            if (isinf(this->proposedLogPrior))
                 return log(0);
           
-            double logLikelihood = this->evaluateLogLikelihood(param, discrete, covariance, dataList);
-            return logPrior + logLikelihood;
+            this->proposedLogLikelihood = this->evaluateLogLikelihood(param, discrete, covariance, dataList);
+            return this->proposedLogPrior + this->proposedLogLikelihood;
         }
         
         // "A handy approximation for the error function and its inverse" by Sergei Winitzki.
@@ -146,6 +146,8 @@ namespace ptmc_discrete{
             this->posteriorDiscrete = MatrixXi::Zero(this->posteriorSamplesLength, this->lengthDiscreteVec);
 
             this->currentLogPosterior = VectorXd::Zero(this->numberTempChains);
+            this->currentLogLikelihood = VectorXd::Zero(this->numberTempChains);
+            this->currentLogPrior = VectorXd::Zero(this->numberTempChains);
             this->currentSampleMean = MatrixXd::Zero(this->numberTempChains,this->numberFittedPar);
             this->currentSample = MatrixXd::Zero(this->numberTempChains,this->numberFittedPar);
             this->currentDiscrete = MatrixXi::Zero(this->numberTempChains, this->lengthDiscreteVec);
@@ -201,6 +203,8 @@ namespace ptmc_discrete{
                 this->currentSampleMean.row(chainNum) = initialSample;
                 this->currentDiscrete.row(chainNum) = initialDiscrete;
                 this->currentLogPosterior(chainNum) = initialLogLikelihood;
+                this->currentLogLikelihood(chainNum) = this->proposedLogLikelihood;
+                this->currentLogPrior(chainNum) = this->proposedLogPrior;
             }
             
             double alphaMVN = -sqrt(2)*ErfInv(0.234-1);
@@ -248,6 +252,8 @@ namespace ptmc_discrete{
                 this->posteriorOut.row(i) = posteriorOutPrev.row(i);
 
             this->currentLogPosterior = PTMCpar["currentLogPosterior"];
+            this->currentLogLikelihood = PTMCpar["currentLogLikelihood"];
+            this->currentLogPrior = PTMCpar["currentLogPrior"];
             this->currentSampleMean = PTMCpar["currentSampleMean"];
             this->currentSample = PTMCpar["currentSample"];
             
@@ -278,6 +284,8 @@ namespace ptmc_discrete{
                     _["counterAcceptTemp"] = this->counterAcceptTemp,
 
                     _["currentLogPosterior"] = this->currentLogPosterior,
+                    _["currentLogLikelihood"] = this->currentLogLikelihood,
+                    _["currentLogPrior"] = this->currentLogPrior,
                     _["currentSampleMean"] = this->currentSampleMean,
                     _["currentSample"] = this->currentSample,
 
@@ -407,6 +415,8 @@ namespace ptmc_discrete{
                 this->currentSample.row(this->workingChainNumber) = proposalSample;
                 this->currentDiscrete.row(this->workingChainNumber) = proposalDiscrete;
                 this->currentLogPosterior(this->workingChainNumber) = proposedLogPosterior;
+                this->currentLogLikelihood(this->workingChainNumber) = proposedLogLikelihood;
+                this->currentLogPrior(this->workingChainNumber) = proposedLogPrior;
             }
         }
         
@@ -552,10 +562,10 @@ namespace ptmc_discrete{
         double evaluateMetropolisRatioTemp(int p, int q)
         {
             double alphaTemp;
-            if(std::isnan(this->currentLogPosterior[q] - this->currentLogPosterior[p]))
+            if(std::isnan(this->currentLogLikelihood[q] - this->currentLogLikelihood[p]))
                 alphaTemp = 0;
             else
-                alphaTemp = MIN(1.0, exp((this->currentLogPosterior[q] - this->currentLogPosterior[p])*(1.0/this->temperatureLadder[p]-1.0/this->temperatureLadder[q])));
+                alphaTemp = MIN(1.0, exp((this->currentLogLikelihood[q] - this->currentLogLikelihood[p])*(1.0/this->temperatureLadder[p]-1.0/this->temperatureLadder[q])));
             
             return alphaTemp;
         }
@@ -566,9 +576,18 @@ namespace ptmc_discrete{
             VectorXi swapDiscreteInterProp, swapDiscreteInterCurr;
 
             double swapLogPosteriorInterCurr, swapLogPosteriorInterProp;
+            double swapLogLikelihoodInterCurr, swapLogLikelihoodInterProp;
+            double swapLogPriorInterCurr, swapLogPriorInterProp;
             
             swapLogPosteriorInterCurr = this->currentLogPosterior(p); swapLogPosteriorInterProp = this->currentLogPosterior(q);
             this->currentLogPosterior(p) = swapLogPosteriorInterProp; this->currentLogPosterior(q) = swapLogPosteriorInterCurr;
+            
+            swapLogLikelihoodInterCurr = this->currentLogLikelihood(p); swapLogLikelihoodInterProp = this->currentLogLikelihood(q);
+            this->currentLogLikelihood(p) = swapLogLikelihoodInterProp; this->currentLogLikelihood(q) = swapLogLikelihoodInterCurr;
+            
+            swapLogPriorInterCurr = this->currentLogPrior(p); swapLogPriorInterProp = this->currentLogPrior(q);
+            this->currentLogPrior(p) = swapLogPriorInterProp; this->currentLogPrior(q) = swapLogPriorInterCurr;
+            
             swapSampleInterCurr = this->currentSample.row(p); swapSampleInterProp = this->currentSample.row(q);
             this->currentSample.row(p) = swapSampleInterProp; this->currentSample.row(q) = swapSampleInterCurr;
             

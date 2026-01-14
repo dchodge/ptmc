@@ -7,7 +7,7 @@ Description: The `ptmc` package provides tools for fitting parallel tempering mc
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 Imports: Rcpp (>= 1.0.3), devtools, magrittr, tidyr, dplyr, brms, purrr, furrr, patchwork, here, ggplot2, doParallel, foreach, parallel, coda, data.table, lubridate, stringr, tidybayes, bayesplot, ggdist, boot, dtplyr, future, reshape2, posterior
 Suggests: knitr, rmarkdown
 LinkingTo: Rcpp, RcppEigen, BH

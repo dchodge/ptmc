@@ -309,7 +309,7 @@ check_settings_discete <- function(settings, model) {
 
   if (is.null(settings[["lengthDiscreteVec"]])) {
     if (is.null(model$discrete_length)) {
-      stop("`lowerParBounds` not specified in settings. MUST be specified. \n")
+      stop("`lengthDiscreteVec` not specified in settings. MUST be specified. \n")
     } 
     settings[["lengthDiscreteVec"]] <- model$discrete_length
     cat("`lengthDiscreteVec` not specified in settings. Defaults to ", model$discrete_length, ". \n")
